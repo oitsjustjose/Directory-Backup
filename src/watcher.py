@@ -30,12 +30,12 @@ class Watcher:
             self.handler,
             self.source,
             recursive=True,
-            # event_filter=[
-            #     FileCreatedEvent,
-            #     FileDeletedEvent,
-            #     FileModifiedEvent,
-            #     FileSystemMovedEvent,
-            # ],
+            event_filter=[
+                FileCreatedEvent,
+                FileDeletedEvent,
+                FileModifiedEvent,
+                FileSystemMovedEvent,
+            ],
         )
         self.observer.setDaemon(True)
         self.observer.start()
@@ -89,17 +89,20 @@ class Handler(FileSystemEventHandler):
         Arguments:
             path (pathlib.Path): The path (a directory) at which to start the recursive cleanup
         """
-        # Base case: we've gone all the way back up to the root, and we'll never delete that..
-        if path == self.dest:
-            return
-        # Ok, the path we're at has items -- no need to keep going up
-        if [x for x in path.iterdir()]:
-            return
-        # Otherwise, we have an empty directory that we should delete
-        shutil.rmtree(path.absolute())
-        # Go up a directory and repeat!
-        up = path.joinpath("..").resolve().absolute()
-        self.__recursively_clean_dirs_upwards(up)
+        try:
+            # Base case: we've gone all the way back up to the root, and we'll never delete that..
+            if path == self.dest:
+                return
+            # Ok, the path we're at has items -- no need to keep going up
+            if [x for x in path.iterdir()]:
+                return
+            # Otherwise, we have an empty directory that we should delete
+            shutil.rmtree(path.absolute())
+            # Go up a directory and repeat!
+            up = path.joinpath("..").resolve().absolute()
+            self.__recursively_clean_dirs_upwards(up)
+        except FileNotFoundError:
+            return # Nothing we can do if the file is missing now
 
     def on_created(self, event: FileCreatedEvent) -> None:
         """
@@ -116,7 +119,10 @@ class Handler(FileSystemEventHandler):
         src = Path(event.src_path).absolute()
         in_dest = self.__in_destination(src)
         os.makedirs(in_dest.parent.absolute(), exist_ok=True)
-        shutil.copy2(src, self.__in_destination(src))
+        try:
+            shutil.copy2(src, self.__in_destination(src))
+        except FileNotFoundError:
+            pass # Sometimes files are removed by an external app before we finish processing
 
     def on_modified(self, event: FileModifiedEvent) -> None:
         """
@@ -138,7 +144,10 @@ class Handler(FileSystemEventHandler):
 
         # Copy over the new file, making required subdirectories
         os.makedirs(in_dest.parent.absolute(), exist_ok=True)
-        shutil.copy2(src, in_dest)
+        try:
+            shutil.copy2(src, in_dest)
+        except FileNotFoundError:
+            pass # Sometimes files are removed by an external app before we finish processing
 
     def on_moved(self, event: FileSystemMovedEvent):
         """
@@ -162,7 +171,10 @@ class Handler(FileSystemEventHandler):
 
         # Copy over the new file, making required subdirectories
         os.makedirs(in_dest.parent.absolute(), exist_ok=True)
-        shutil.copy2(dest, in_dest)
+        try:
+            shutil.copy2(dest, in_dest)
+        except FileNotFoundError:
+            pass # Sometimes files are removed by an external app before we finish processing
 
         # Delete the old file, try to delete parent folder if it's empty
         if in_dest_before.exists():
