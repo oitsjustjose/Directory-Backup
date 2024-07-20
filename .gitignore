@@ -1,9 +1,12 @@
 __pycache__
 /bin
+/build
+/dist
 /include
 /lib
 /lib64
 /logs
+/main.spec
 /out
 /Scripts
 /share

@@ -1,0 +1,1 @@
+pyinstaller.exe -F --paths=Lib\site-packages .\src\main.py

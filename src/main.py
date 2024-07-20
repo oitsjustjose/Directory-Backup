@@ -1,13 +1,24 @@
 import argparse
 import logging
 from pathlib import Path
-import sys
 from datetime import datetime
 from datetime import date
 from threading import Thread
 
 import os
-from .watcher import Watcher
+from src.watcher import Watcher
+from enum import Enum
+
+
+class LogLevel(Enum):
+    debug = "DEBUG"
+    info = "INFO"
+    warning = "WARNING"
+    error = "ERROR"
+    critical = "CRITICAL"
+
+    def __str__(self):
+        return self.value
 
 
 def __init_dirs(dest: str):
@@ -16,51 +27,74 @@ def __init_dirs(dest: str):
     if not os.path.exists("./logs"):
         os.mkdir("./logs")
 
+
 def __get_log_version(today: date) -> int:
     existing = list(filter(lambda x: x.startswith(str(today)), os.listdir("./logs")))
-    return len(existing)+1
+    return len(existing) + 1
 
 
-def main(source: str, destination: str) -> None:
-    """"""
-    __init_dirs(destination)
+def main(
+    source: Path, destination: Path, ignore_pattern: str, log_level: LogLevel
+) -> None:
+    """
+    Main method for this entire program
+    Arguments:
+        source (pathlib.Path): The path to watch
+        destination (pathlib.Path): The path to copy directory changes to
+        ignore_pattern (str): A regex pattern used to ignore backing up certain directories
+        log_level (LogLevel): The verbosity at which logs should be written. Defaults to ERROR from argparse
+    """
+    __init_dirs(str(destination))
 
     now = datetime.now()
 
     logger = logging.getLogger(__name__)
-    logger.setLevel("DEBUG")
-    logging.basicConfig(filename=f"./logs/{now.date()}-{__get_log_version(now.date())}.log")
+    logger.setLevel(str(log_level))
+    logging.basicConfig(
+        filename=f"./logs/{now.date()}-{__get_log_version(now.date())}.log"
+    )
 
     logger.info(f"Watching directory {source}")
     logger.info(f"Backing up to {destination}")
 
+    # Spin up a different thread for each subdirectory to keep up with performance
+    subdirs = sorted(
+        list(
+            filter(
+                lambda x: source.joinpath(x).resolve().is_dir(),
+                os.listdir(source),
+            )
+        )
+    )
     threads = [
         Thread(
+            daemon=True,
             target=worker,
             args=(
                 logger,
-                Path(source).absolute().joinpath(dir),
-                Path(destination).absolute().joinpath(dir),
+                source.joinpath(subdir).resolve().absolute(),
+                destination.joinpath(subdir).resolve().absolute(),
+                ignore_pattern
             ),
-            daemon=True,
         )
-        for dir in filter(
-            lambda x: os.path.isdir(Path(source).absolute().joinpath(x)),
-            os.listdir(source),
-        )
+        for subdir in subdirs
     ]
+
+    logger.info(f"Starting up {len(threads)} watcher threads")
 
     try:
         [x.start() for x in threads]
+        logger.info(f"{len(threads)} Threads started!")
         [x.join() for x in threads]
     except KeyboardInterrupt:
         print("Waiting for threads to die...")
+        logger.info("Waiting for threads to die...")
         pass  # keyboard interrupt should be caught by each thread
 
 
-def worker(logger, source: str, destination: str) -> None:
+def worker(logger, source: Path, destination: Path, ignore_pattern: str) -> None:
     try:
-        watcher = Watcher(logger, source, destination)
+        watcher = Watcher(logger, source, destination, ignore_pattern)
         watcher.start()
     except KeyboardInterrupt:
         watcher.stop()
@@ -80,6 +114,20 @@ if __name__ == "__main__":
         help="The directory to which changed files are mirrored to.",
         required=True,
     )
+    parser.add_argument(
+        "-i",
+        "--ignore-pattern",
+        help="A list of directories to ignore when backing up, comma-delimited",
+        default="",
+    )
+    parser.add_argument(
+        "-l",
+        "--log-level",
+        help="Changes logging level to show all debug messages",
+        default=LogLevel.error,
+        type=LogLevel,
+        choices=list(LogLevel),
+    )
 
     try:
         args = parser.parse_args()
@@ -87,4 +135,4 @@ if __name__ == "__main__":
         print("Failed to start application:")
         print(e)
 
-    main(args.source, args.destination)
+    main(Path(args.source), Path(args.destination), args.ignore_pattern, args.log_level)

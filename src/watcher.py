@@ -14,15 +14,18 @@ from watchdog.events import (
 )
 from watchdog.observers import Observer
 from threading import current_thread
+import re
 
 
 class Watcher:
-    def __init__(self, logger: Logger, source: str, destination: str):
+    def __init__(
+        self, logger: Logger, source: Path, destination: Path, ignore_pattern: str = ""
+    ):
         self.logger = logger
-        self.source = Path(source).absolute()
-        self.dest = Path(destination).absolute()
+        self.source = source.absolute()
+        self.dest = destination.absolute()
         self.observer = Observer()
-        self.handler = Handler(self.logger, self.source, self.dest)
+        self.handler = Handler(self.logger, self.source, self.dest, ignore_pattern)
         self.running = False
 
     def start(self):
@@ -54,10 +57,13 @@ class Watcher:
 
 
 class Handler(FileSystemEventHandler):
-    def __init__(self, logger: Logger, source: Path, destination: Path):
+    def __init__(
+        self, logger: Logger, source: Path, destination: Path, ignore_pattern: str
+    ):
         self.logger = logger
         self.source = source
         self.dest = destination
+        self.ignore_pattern = ignore_pattern
 
     def __log_event(self, event: FileSystemEvent) -> None:
         """
@@ -66,8 +72,8 @@ class Handler(FileSystemEventHandler):
             event (watchdog.events.FileSystemEvent): the event fired
         """
         dest_str = f", dest: {event.dest_path}" if event.dest_path else ""
-        self.logger.info(
-            f"[{current_thread().native_id}] type: {event.event_type}, src: {event.src_path}{dest_str}"
+        self.logger.debug(
+            f"[{current_thread().native_id}]: type: {event.event_type}, src: {event.src_path}{dest_str}"
         )
 
     def __in_destination(self, path: Path) -> Path:
@@ -102,7 +108,7 @@ class Handler(FileSystemEventHandler):
             up = path.joinpath("..").resolve().absolute()
             self.__recursively_clean_dirs_upwards(up)
         except FileNotFoundError:
-            return # Nothing we can do if the file is missing now
+            return  # Nothing we can do if the file is missing now
 
     def on_created(self, event: FileCreatedEvent) -> None:
         """
@@ -112,17 +118,22 @@ class Handler(FileSystemEventHandler):
         Arguments:
             event (watchdog.events.FileCreatedEvent): the event fired
         """
-        if event.is_directory:
-            return
-
-        self.__log_event(event)
-        src = Path(event.src_path).absolute()
-        in_dest = self.__in_destination(src)
-        os.makedirs(in_dest.parent.absolute(), exist_ok=True)
         try:
+            if event.is_directory:
+                return
+
+            if self.ignore_pattern and re.search(self.ignore_pattern, event.src_path):
+                return
+
+            self.__log_event(event)
+            src = Path(event.src_path).absolute()
+            in_dest = self.__in_destination(src)
+            os.makedirs(in_dest.parent.absolute(), exist_ok=True)
             shutil.copy2(src, self.__in_destination(src))
-        except FileNotFoundError:
-            pass # Sometimes files are removed by an external app before we finish processing
+        except Exception as exc:
+            self.logger.warn(
+                f"[{current_thread().native_id}]: Exception thrown in Handler#on_created:\n\t{exc}"
+            )
 
     def on_modified(self, event: FileModifiedEvent) -> None:
         """
@@ -131,23 +142,28 @@ class Handler(FileSystemEventHandler):
         Arguments:
             event (watchdog.events.FileModifiedEvent): the event fired
         """
-        if event.is_directory:
-            return
-
-        self.__log_event(event)
-
-        src = Path(event.src_path).absolute()
-        in_dest = self.__in_destination(src)
-
-        if in_dest.exists():
-            in_dest.unlink()
-
-        # Copy over the new file, making required subdirectories
-        os.makedirs(in_dest.parent.absolute(), exist_ok=True)
         try:
+            if event.is_directory:
+                return
+
+            if self.ignore_pattern and re.search(self.ignore_pattern, event.src_path):
+                return
+
+            self.__log_event(event)
+
+            src = Path(event.src_path).absolute()
+            in_dest = self.__in_destination(src)
+
+            if in_dest.exists():
+                in_dest.unlink()
+
+            # Copy over the new file, making required subdirectories
+            os.makedirs(in_dest.parent.absolute(), exist_ok=True)
             shutil.copy2(src, in_dest)
-        except FileNotFoundError:
-            pass # Sometimes files are removed by an external app before we finish processing
+        except Exception as exc:
+            self.logger.warn(
+                f"[{current_thread().native_id}]: Exception thrown in Handler#on_modified:\n\t{exc}"
+            )
 
     def on_moved(self, event: FileSystemMovedEvent):
         """
@@ -158,29 +174,40 @@ class Handler(FileSystemEventHandler):
         Arguments:
             event (watchdog.events.FileSystemMovedEvent): the event fired
         """
-        if event.is_directory:
-            return
-
-        self.__log_event(event)
-
-        src = Path(event.src_path).absolute()
-        dest = Path(event.dest_path).absolute()
-
-        in_dest_before = self.__in_destination(src)
-        in_dest = self.__in_destination(dest)
-
-        # Copy over the new file, making required subdirectories
-        os.makedirs(in_dest.parent.absolute(), exist_ok=True)
         try:
-            shutil.copy2(dest, in_dest)
-        except FileNotFoundError:
-            pass # Sometimes files are removed by an external app before we finish processing
+            if event.is_directory:
+                return
 
-        # Delete the old file, try to delete parent folder if it's empty
-        if in_dest_before.exists():
-            in_dest_before.unlink()
+            if self.ignore_pattern and re.search(self.ignore_pattern, event.src_path):
+                return
 
-        self.__recursively_clean_dirs_upwards(in_dest_before.parent.absolute())
+            if self.ignore_pattern and re.search(self.ignore_pattern, event.dest_path):
+                return
+
+            self.__log_event(event)
+
+            src = Path(event.src_path).absolute()
+            dest = Path(event.dest_path).absolute()
+
+            in_dest_before = self.__in_destination(src)
+            in_dest = self.__in_destination(dest)
+
+            # Copy over the new file, making required subdirectories
+            os.makedirs(in_dest.parent.absolute(), exist_ok=True)
+            try:
+                shutil.copy2(dest, in_dest)
+            except FileNotFoundError:
+                pass  # Sometimes files are removed by an external app before we finish processing
+
+            # Delete the old file, try to delete parent folder if it's empty
+            if in_dest_before.exists():
+                in_dest_before.unlink()
+
+            self.__recursively_clean_dirs_upwards(in_dest_before.parent.absolute())
+        except Exception as exc:
+            self.logger.warn(
+                f"[{current_thread().native_id}]: Exception thrown in Handler#on_moved:\n\t{exc}"
+            )
 
     def on_deleted(self, event: FileDeletedEvent) -> None:
         """
@@ -188,14 +215,22 @@ class Handler(FileSystemEventHandler):
         Arguments:
             event (watchdog.events.FileDeletedEvent): the event fired
         """
-        if event.is_directory:
-            return
+        try:
+            if event.is_directory:
+                return
 
-        self.__log_event(event)
+            if self.ignore_pattern and re.search(self.ignore_pattern, event.src_path):
+                return
 
-        in_dest = self.__in_destination(event.src_path)
+            self.__log_event(event)
 
-        if in_dest.exists():
-            in_dest.unlink()
+            in_dest = self.__in_destination(event.src_path)
 
-        self.__recursively_clean_dirs_upwards(in_dest.parent.absolute())
+            if in_dest.exists():
+                in_dest.unlink()
+
+            self.__recursively_clean_dirs_upwards(in_dest.parent.absolute())
+        except Exception as exc:
+            self.logger.warn(
+                f"[{current_thread().native_id}]: Exception thrown in Handler#on_deleted:\n\t{exc}"
+            )
