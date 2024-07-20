@@ -1,7 +1,9 @@
 import argparse
 import logging
+from pathlib import Path
 import sys
 from datetime import datetime
+from threading import Thread
 
 import os
 from .watcher import Watcher
@@ -25,14 +27,36 @@ def main(source: str, destination: str) -> None:
     logger.info(f"Watching directory {source}")
     logger.info(f"Backing up to {destination}")
 
+    threads = [
+        Thread(
+            target=worker,
+            args=(
+                logger,
+                Path(source).absolute().joinpath(dir),
+                Path(destination).absolute().joinpath(dir),
+            ),
+            daemon=True,
+        )
+        for dir in filter(
+            lambda x: os.path.isdir(Path(source).absolute().joinpath(x)),
+            os.listdir(source),
+        )
+    ]
+
+    try:
+        [x.start() for x in threads]
+        [x.join() for x in threads]
+    except KeyboardInterrupt:
+        print("Waiting for threads to die...")
+        pass  # keyboard interrupt should be caught by each thread
+
+
+def worker(logger, source: str, destination: str) -> None:
     try:
         watcher = Watcher(logger, source, destination)
-        logger.info("Watcher started")
         watcher.start()
     except KeyboardInterrupt:
-        logger.info("Stopping watcher")
         watcher.stop()
-        logger.info("Watcher stopped -- quitting!")
 
 
 if __name__ == "__main__":
