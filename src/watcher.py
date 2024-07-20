@@ -8,6 +8,7 @@ from watchdog.events import (
     FileCreatedEvent,
     FileDeletedEvent,
     FileModifiedEvent,
+    FileSystemEvent,
     FileSystemEventHandler,
     FileSystemMovedEvent,
 )
@@ -24,17 +25,26 @@ class Watcher:
         self.running = False
 
     def start(self):
-
-        self.observer.schedule(self.handler, self.source, recursive=True)
+        self.observer.schedule(
+            self.handler,
+            self.source,
+            recursive=True,
+            event_filter=[
+                FileCreatedEvent,
+                FileDeletedEvent,
+                FileModifiedEvent,
+                FileSystemMovedEvent,
+            ],
+        )
         self.logger.info("Custom handler has been scheduled with the Observer")
-
+        # self.observer.setDaemon(True)
         self.observer.start()
         self.logger.info("The Observer has been started!")
 
         self.logger.info("Starting main loop @ 1s polling rate")
         self.running = True
         while self.running:
-            sleep(1)
+            sleep(0.01)
 
     def stop(self):
         self.running = False
@@ -47,6 +57,15 @@ class Handler(FileSystemEventHandler):
         self.logger = logger
         self.source = source
         self.dest = destination
+
+    def __log_event(self, event: FileSystemEvent) -> None:
+        """
+        Logs all events for the sake of it
+        Arguments:
+            event (watchdog.events.FileSystemEvent): the event fired
+        """
+        dest_str = f", dest: {event.dest_path}" if event.dest_path else ""
+        self.logger.info(f"type: {event.event_type}, src: {event.src_path}{dest_str}")
 
     def __in_destination(self, path: Path) -> Path:
         """
@@ -89,6 +108,8 @@ class Handler(FileSystemEventHandler):
         """
         if event.is_directory:
             return
+
+        self.__log_event(event)
         src = Path(event.src_path).absolute()
         in_dest = self.__in_destination(src)
         os.makedirs(in_dest.parent.absolute(), exist_ok=True)
@@ -103,6 +124,8 @@ class Handler(FileSystemEventHandler):
         """
         if event.is_directory:
             return
+
+        self.__log_event(event)
 
         src = Path(event.src_path).absolute()
         in_dest = self.__in_destination(src)
@@ -125,6 +148,8 @@ class Handler(FileSystemEventHandler):
         """
         if event.is_directory:
             return
+
+        self.__log_event(event)
 
         src = Path(event.src_path).absolute()
         dest = Path(event.dest_path).absolute()
@@ -150,6 +175,8 @@ class Handler(FileSystemEventHandler):
         """
         if event.is_directory:
             return
+
+        self.__log_event(event)
 
         in_dest = self.__in_destination(event.src_path)
 
