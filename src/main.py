@@ -21,11 +21,11 @@ class LogLevel(Enum):
         return self.value
 
 
-def __init_dirs(dest: str):
+def __init_dirs(logs: str, dest: str):
     if not os.path.exists(dest):
         os.makedirs(dest)
-    if not os.path.exists("./logs"):
-        os.mkdir("./logs")
+    if not os.path.exists(logs):
+        os.mkdir(logs)
 
 
 def __get_log_version(today: date) -> int:
@@ -34,7 +34,7 @@ def __get_log_version(today: date) -> int:
 
 
 def main(
-    source: Path, destination: Path, ignore_pattern: str, log_level: LogLevel
+    source: Path, destination: Path, ignore_pattern: str, log_level: LogLevel, log_output: Path
 ) -> None:
     """
     Main method for this entire program
@@ -43,16 +43,19 @@ def main(
         destination (pathlib.Path): The path to copy directory changes to
         ignore_pattern (str): A regex pattern used to ignore backing up certain directories
         log_level (LogLevel): The verbosity at which logs should be written. Defaults to ERROR from argparse
+        log_output (pathlib.Path): The path to a folder where log outputs should be written
     """
-    __init_dirs(str(destination))
+    __init_dirs(log_output, destination)
 
     now = datetime.now()
 
     logger = logging.getLogger(__name__)
     logger.setLevel(str(log_level))
-    logging.basicConfig(
-        filename=f"./logs/{now.date()}-{__get_log_version(now.date())}.log"
-    )
+
+    filename = f"{now.date()}-{__get_log_version(now.date())}.log"
+    filename = log_output.joinpath(filename).resolve().absolute()
+
+    logging.basicConfig(filename=filename)
 
     logger.info(f"Watching directory {source}")
     logger.info(f"Backing up to {destination}")
@@ -74,7 +77,7 @@ def main(
                 logger,
                 source.joinpath(subdir).resolve().absolute(),
                 destination.joinpath(subdir).resolve().absolute(),
-                ignore_pattern
+                ignore_pattern,
             ),
         )
         for subdir in subdirs
@@ -117,16 +120,22 @@ if __name__ == "__main__":
     parser.add_argument(
         "-i",
         "--ignore-pattern",
-        help="A list of directories to ignore when backing up, comma-delimited",
+        help="A regex string used to match against any paths that should be ignored.",
         default="",
     )
     parser.add_argument(
         "-l",
         "--log-level",
-        help="Changes logging level to show all debug messages",
+        help="Changes logging level to show all debug messages.",
         default=LogLevel.error,
         type=LogLevel,
         choices=list(LogLevel),
+    )
+    parser.add_argument(
+        "-o",
+        "--log-output",
+        help=f"Sets the location of the log output (defaults to {Path('./logs').resolve().absolute()}).",
+        default=Path("./logs").resolve().absolute(),
     )
 
     try:
@@ -135,4 +144,15 @@ if __name__ == "__main__":
         print("Failed to start application:")
         print(e)
 
-    main(Path(args.source), Path(args.destination), args.ignore_pattern, args.log_level)
+    source = Path(args.source)
+    destination = Path(args.destination)
+    log_output = Path(args.log_output)
+
+    if not source.is_dir():
+        print(f"Argument source resolves to {source.resolve().absolute()}, which is not a directory.")
+    elif  destination.exists() and not destination.is_dir():
+        print(f"Argument destination resolves to {destination.resolve().absolute()}, which is not a directory.")
+    elif log_output.exists() and not log_output.is_dir():
+        print(f"Argument log_output resolves to {log_output.resolve().absolute()}, which is not a directory.")
+    else:
+        main(source, destination, args.ignore_pattern, args.log_level, log_output)
