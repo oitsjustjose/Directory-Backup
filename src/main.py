@@ -34,7 +34,11 @@ def __get_log_version(today: date) -> int:
 
 
 def main(
-    source: Path, destination: Path, ignore_pattern: str, log_level: LogLevel, log_output: Path
+    source: Path,
+    destination: Path,
+    ignore_pattern: str,
+    log_level: LogLevel,
+    log_output: Path,
 ) -> None:
     """
     Main method for this entire program
@@ -149,10 +153,16 @@ if __name__ == "__main__":
     log_output = Path(args.log_output)
 
     if not source.is_dir():
-        print(f"Argument source resolves to {source.resolve().absolute()}, which is not a directory.")
-    elif  destination.exists() and not destination.is_dir():
-        print(f"Argument destination resolves to {destination.resolve().absolute()}, which is not a directory.")
+        print(
+            f"Argument source resolves to {source.resolve().absolute()}, which is not a directory."
+        )
+    elif destination.exists() and not destination.is_dir():
+        print(
+            f"Argument destination resolves to {destination.resolve().absolute()}, which is not a directory."
+        )
     elif log_output.exists() and not log_output.is_dir():
-        print(f"Argument log_output resolves to {log_output.resolve().absolute()}, which is not a directory.")
+        print(
+            f"Argument log_output resolves to {log_output.resolve().absolute()}, which is not a directory."
+        )
     else:
         main(source, destination, args.ignore_pattern, args.log_level, log_output)
