@@ -5,6 +5,7 @@ from datetime import datetime
 from datetime import date
 
 import os
+import sys
 import time
 from src.watcher import Watcher
 from enum import Enum
@@ -134,6 +135,7 @@ if __name__ == "__main__":
     except Exception as e:
         print("Failed to start application:")
         print(e)
+        sys.exit(-1)
 
     source = Path(args.source)
     destination = Path(args.destination)
