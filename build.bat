@@ -1,1 +1,1 @@
-pyinstaller.exe -F --paths=Lib\site-packages .\src\main.py
+pyinstaller.exe -F --paths=Lib\site-packages --name="dirbackup" .\src\main.py
