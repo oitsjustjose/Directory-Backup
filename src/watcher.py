@@ -44,13 +44,9 @@ class Watcher:
         self.logger.info(f"The Observer for {self.source} has been started!")
 
     def stop(self):
-        # self.logger.info(f"The Observer for {self.source} has been started!")
-        print(f"Stopping observer for {self.source}")
         self.observer.stop()
-        print(f"Stopped observer for {self.source}")
-        self.observer.join(2)
-        print(f"Joined observer for {self.source}")
-        # self.observer.join(2)
+        self.observer.join()
+        self.logger.info(f"The Observer for {self.source} has been stopped!")
 
 
 class Handler(FileSystemEventHandler):
