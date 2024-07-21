@@ -3,9 +3,9 @@ import logging
 from pathlib import Path
 from datetime import datetime
 from datetime import date
-from threading import Thread
 
 import os
+import time
 from src.watcher import Watcher
 from enum import Enum
 
@@ -73,40 +73,27 @@ def main(
             )
         )
     )
-    threads = [
-        Thread(
-            daemon=True,
-            target=worker,
-            args=(
-                logger,
-                source.joinpath(subdir).resolve().absolute(),
-                destination.joinpath(subdir).resolve().absolute(),
-                ignore_pattern,
-            ),
+
+    watchers = [
+        Watcher(
+            logger,
+            source.joinpath(subdir).resolve().absolute(),
+            destination.joinpath(subdir).resolve().absolute(),
+            ignore_pattern,
         )
         for subdir in subdirs
     ]
 
-    logger.info(f"Starting up {len(threads)} watcher threads")
-
-    try:
-        [x.start() for x in threads]
-        logger.info(f"{len(threads)} Threads started!")
-        [x.join() for x in threads]
-    except KeyboardInterrupt:
-        print("Waiting for threads to die...")
-        logger.info("Waiting for threads to die...")
-        pass  # keyboard interrupt should be caught by each thread
-
-
-def worker(logger, source: Path, destination: Path, ignore_pattern: str) -> None:
-    try:
-        watcher = Watcher(logger, source, destination, ignore_pattern)
-        watcher.start()
-    except KeyboardInterrupt:
-        watcher.stop()
-
-
+    [x.start() for x in watchers]
+    
+    while True:
+        try:
+            time.sleep(0.01)
+        except KeyboardInterrupt:
+            print("Quitting...")
+            [x.stop() for x in watchers]
+            break
+        
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(

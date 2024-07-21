@@ -2,7 +2,6 @@ import os
 import shutil
 from logging import Logger
 from pathlib import Path
-from time import sleep
 
 from watchdog.events import (
     FileCreatedEvent,
@@ -26,7 +25,6 @@ class Watcher:
         self.dest = destination.absolute()
         self.observer = Observer()
         self.handler = Handler(self.logger, self.source, self.dest, ignore_pattern)
-        self.running = False
 
     def start(self):
         self.observer.schedule(
@@ -42,18 +40,17 @@ class Watcher:
         )
         self.observer.setDaemon(True)
         self.observer.start()
-        self.logger.info(
-            f"[{current_thread().native_id}] The Observer for {self.source} has been started!"
-        )
-
-        self.running = True
-        while self.running:
-            sleep(0.01)
+        
+        self.logger.info(f"The Observer for {self.source} has been started!")
 
     def stop(self):
-        self.running = False
+        # self.logger.info(f"The Observer for {self.source} has been started!")
+        print(f"Stopping observer for {self.source}")
         self.observer.stop()
-        self.observer.join()
+        print(f"Stopped observer for {self.source}")
+        self.observer.join(2)
+        print(f"Joined observer for {self.source}")
+        # self.observer.join(2)
 
 
 class Handler(FileSystemEventHandler):
@@ -73,7 +70,7 @@ class Handler(FileSystemEventHandler):
         """
         dest_str = f", dest: {event.dest_path}" if event.dest_path else ""
         self.logger.debug(
-            f"[{current_thread().native_id}]: type: {event.event_type}, src: {event.src_path}{dest_str}"
+            f"type: {event.event_type}, src: {event.src_path}{dest_str}"
         )
 
     def __in_destination(self, path: Path) -> Path:
@@ -132,7 +129,7 @@ class Handler(FileSystemEventHandler):
             shutil.copy2(src, self.__in_destination(src))
         except Exception as exc:
             self.logger.warn(
-                f"[{current_thread().native_id}]: Exception thrown in Handler#on_created:\n\t{exc}"
+                f"Exception thrown in Handler#on_created:\n\t{exc}"
             )
 
     def on_modified(self, event: FileModifiedEvent) -> None:
@@ -162,7 +159,7 @@ class Handler(FileSystemEventHandler):
             shutil.copy2(src, in_dest)
         except Exception as exc:
             self.logger.warn(
-                f"[{current_thread().native_id}]: Exception thrown in Handler#on_modified:\n\t{exc}"
+                f"Exception thrown in Handler#on_modified:\n\t{exc}"
             )
 
     def on_moved(self, event: FileSystemMovedEvent):
@@ -206,7 +203,7 @@ class Handler(FileSystemEventHandler):
             self.__recursively_clean_dirs_upwards(in_dest_before.parent.absolute())
         except Exception as exc:
             self.logger.warn(
-                f"[{current_thread().native_id}]: Exception thrown in Handler#on_moved:\n\t{exc}"
+                f"Exception thrown in Handler#on_moved:\n\t{exc}"
             )
 
     def on_deleted(self, event: FileDeletedEvent) -> None:
@@ -232,5 +229,5 @@ class Handler(FileSystemEventHandler):
             self.__recursively_clean_dirs_upwards(in_dest.parent.absolute())
         except Exception as exc:
             self.logger.warn(
-                f"[{current_thread().native_id}]: Exception thrown in Handler#on_deleted:\n\t{exc}"
+                f"Exception thrown in Handler#on_deleted:\n\t{exc}"
             )
