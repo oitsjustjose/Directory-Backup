@@ -12,7 +12,6 @@ from watchdog.events import (
     FileSystemMovedEvent,
 )
 from watchdog.observers import Observer
-from threading import current_thread
 import re
 
 
@@ -24,6 +23,7 @@ class Watcher:
         self.source = source.absolute()
         self.dest = destination.absolute()
         self.observer = Observer()
+        self.observer.daemon = True
         self.handler = Handler(self.logger, self.source, self.dest, ignore_pattern)
 
     def start(self):
@@ -38,9 +38,8 @@ class Watcher:
                 FileSystemMovedEvent,
             ],
         )
-        self.observer.setDaemon(True)
+
         self.observer.start()
-        
         self.logger.info(f"The Observer for {self.source} has been started!")
 
     def stop(self):
@@ -65,9 +64,7 @@ class Handler(FileSystemEventHandler):
             event (watchdog.events.FileSystemEvent): the event fired
         """
         dest_str = f", dest: {event.dest_path}" if event.dest_path else ""
-        self.logger.debug(
-            f"type: {event.event_type}, src: {event.src_path}{dest_str}"
-        )
+        self.logger.debug(f"type: {event.event_type}, src: {event.src_path}{dest_str}")
 
     def __in_destination(self, path: Path) -> Path:
         """
@@ -124,9 +121,7 @@ class Handler(FileSystemEventHandler):
             os.makedirs(in_dest.parent.absolute(), exist_ok=True)
             shutil.copy2(src, self.__in_destination(src))
         except Exception as exc:
-            self.logger.warn(
-                f"Exception thrown in Handler#on_created:\n\t{exc}"
-            )
+            self.logger.warn(f"Exception thrown in Handler#on_created:\n\t{exc}")
 
     def on_modified(self, event: FileModifiedEvent) -> None:
         """
@@ -154,9 +149,7 @@ class Handler(FileSystemEventHandler):
             os.makedirs(in_dest.parent.absolute(), exist_ok=True)
             shutil.copy2(src, in_dest)
         except Exception as exc:
-            self.logger.warn(
-                f"Exception thrown in Handler#on_modified:\n\t{exc}"
-            )
+            self.logger.warn(f"Exception thrown in Handler#on_modified:\n\t{exc}")
 
     def on_moved(self, event: FileSystemMovedEvent):
         """
@@ -198,9 +191,7 @@ class Handler(FileSystemEventHandler):
 
             self.__recursively_clean_dirs_upwards(in_dest_before.parent.absolute())
         except Exception as exc:
-            self.logger.warn(
-                f"Exception thrown in Handler#on_moved:\n\t{exc}"
-            )
+            self.logger.warn(f"Exception thrown in Handler#on_moved:\n\t{exc}")
 
     def on_deleted(self, event: FileDeletedEvent) -> None:
         """
@@ -224,6 +215,4 @@ class Handler(FileSystemEventHandler):
 
             self.__recursively_clean_dirs_upwards(in_dest.parent.absolute())
         except Exception as exc:
-            self.logger.warn(
-                f"Exception thrown in Handler#on_deleted:\n\t{exc}"
-            )
+            self.logger.warn(f"Exception thrown in Handler#on_deleted:\n\t{exc}")

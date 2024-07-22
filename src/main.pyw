@@ -65,36 +65,24 @@ def main(
     logger.info(f"Watching directory {source}")
     logger.info(f"Backing up to {destination}")
 
-    # Spin up a different thread for each subdirectory to keep up with performance
-    subdirs = sorted(
-        list(
-            filter(
-                lambda x: source.joinpath(x).resolve().is_dir(),
-                os.listdir(source),
-            )
-        )
+    watcher = Watcher(
+        logger,
+        source.resolve().absolute(),
+        destination.resolve().absolute(),
+        ignore_pattern,
     )
 
-    watchers = [
-        Watcher(
-            logger,
-            source.joinpath(subdir).resolve().absolute(),
-            destination.joinpath(subdir).resolve().absolute(),
-            ignore_pattern,
-        )
-        for subdir in subdirs
-    ]
+    watcher.start()
 
-    [x.start() for x in watchers]
-    
     while True:
         try:
-            time.sleep(0.01)
+            time.sleep(0.001)
         except KeyboardInterrupt:
             print("Quitting...")
-            [x.stop() for x in watchers]
+            watcher.stop()
             break
-        
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
